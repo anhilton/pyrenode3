@@ -12,6 +12,8 @@ from typing import Union
 from subprocess import check_output, STDOUT
 
 from pythonnet import load as pythonnet_load
+import pythonnet
+import clr_loader
 from clr_loader.util.runtime_spec import DotnetCoreRuntimeSpec
 
 from pyrenode3 import env
@@ -75,6 +77,20 @@ class RenodeLoader(metaclass=MetaSingleton):
             raise InitializationError(msg)
 
         return self.__bin_dir
+
+    @staticmethod
+    def load_runtime_at(runtime: "Union[str, pathlib.Path]"):
+        """Load clr runtime from source install"""
+        runtime_dir = pathlib.Path(runtime)
+        if runtime_dir.exists():
+            # NOTE this may not be the most platform independent...
+            supported_exts = [pathlib.Path(f"*.{ext}") for ext in ("dylib", "so", "dll")]
+            rt_libraries = [lib for lib in runtime_dir.glob("**/libmono-2.0.*") if any(lib.match(ext) for ext in supported_exts)]
+            if rt_libraries != []:
+                [libmono, *_] = rt_libraries
+                pythonnet.load("mono", libmono=libmono)
+                return "mono"
+        return None
 
     @classmethod
     def from_mono_arch_pkg(cls, path: "Union[str, pathlib.Path]"):
@@ -326,7 +342,10 @@ class RenodeLoader(metaclass=MetaSingleton):
             fullpath = self.binaries / dll
             # We do not normally ship CoreLib (except portable), and it gets loaded by other dlls anyway, but loading it directly raises an error:
             # System.IO.FileLoadException: Could not load file or assembly 'System.Private.CoreLib, Version=6.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e'.
-            if fullpath.exists() and fullpath.name != "System.Private.CoreLib.dll":
+            skip_dll = ["System.Private.CoreLib.dll"]
+            if env.pyrenode_skip_gui:
+                skip_dll += ["Xwt.Gtk.dll"]
+            if fullpath.exists() and fullpath.name not in skip_dll:
                 clr.AddReference(str(fullpath))
 
     def __setup(self,

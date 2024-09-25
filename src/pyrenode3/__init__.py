@@ -4,12 +4,15 @@ import logging
 from pyrenode3.loader import RenodeLoader
 from pyrenode3 import env
 
-
 if not env.pyrenode_skip_load:
     runtime = env.pyrenode_runtime
 
     if runtime not in ["mono", "coreclr"]:
-        raise ImportError(f"Runtime {runtime!r} not supported")
+        maybe_runtime = RenodeLoader.load_runtime_at(runtime)
+        if maybe_runtime is None:
+            raise ImportError(f"Runtime {runtime!r} not supported")
+        else:
+            runtime = maybe_runtime
 
     if sum(map(bool, (env.pyrenode_pkg, env.pyrenode_build_dir, env.pyrenode_bin))) > 1:
         raise ImportError(
@@ -17,7 +20,7 @@ if not env.pyrenode_skip_load:
         )
 
     if env.pyrenode_pkg:
-        if runtime == "mono":
+        if "mono" in runtime:
             RenodeLoader.from_mono_arch_pkg(env.pyrenode_pkg)
         elif runtime == "coreclr":
             RenodeLoader.from_net_pkg(env.pyrenode_pkg)
